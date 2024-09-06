@@ -34,7 +34,19 @@ class UnigramFeatureExtractor(FeatureExtractor):
     """
 
     def __init__(self, indexer: Indexer):
-        raise Exception("Must be implemented")
+        self.indexer = indexer
+
+    def get_indexer(self):
+        return self.indexer
+
+    def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
+        c = Counter()
+        for word in sentence:
+            self.indexer.add_and_get_index(word, add_to_indexer)
+            if add_to_indexer:
+                c[word] += 1
+
+        return c
 
 
 class BigramFeatureExtractor(FeatureExtractor):
@@ -106,6 +118,12 @@ def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureE
     :param feat_extractor: feature extractor to use
     :return: trained PerceptronClassifier model
     """
+
+    # We have the feature vector. It is going to get bigger as we see more examples.
+    # We need to define a weight vector and write rules for how it will change
+    # Once we have both we can do a dot product of them to predict the label
+    for i in range(len(train_exs)):
+        feature_vector = feat_extractor.extract_features(train_exs[i].words, True)
     raise Exception("Must be implemented")
 
 

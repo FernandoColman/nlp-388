@@ -4,6 +4,7 @@ from sentiment_data import *
 from utils import *
 
 from collections import Counter
+import numpy as np
 
 
 class FeatureExtractor(object):
@@ -27,6 +28,18 @@ class FeatureExtractor(object):
         raise Exception("Don't call me, call my subclasses")
 
 
+stopwords = ["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself",
+             "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself",
+             "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these",
+             "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do",
+             "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while",
+             "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before",
+             "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again",
+             "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each",
+             "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than",
+             "too", "very", "s", "t", "can", "will", "just", "don", "should", "now", ".", ",", "'"]
+
+
 class UnigramFeatureExtractor(FeatureExtractor):
     """
     Extracts unigram bag-of-words features from a sentence. It's up to you to decide how you want to handle counts
@@ -42,9 +55,8 @@ class UnigramFeatureExtractor(FeatureExtractor):
     def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
         c = Counter()
         for word in sentence:
-            self.indexer.add_and_get_index(word, add_to_indexer)
-            if add_to_indexer:
-                c[word] += 1
+            if add_to_indexer and word not in stopwords:
+                c[self.indexer.add_and_get_index(word)] += 1
 
         return c
 
@@ -96,8 +108,21 @@ class PerceptronClassifier(SentimentClassifier):
     modify the constructor to pass these in.
     """
 
-    def __init__(self):
-        raise Exception("Must be implemented")
+    def __init__(self, weight_vector: np.array):
+        self.weight_vector = weight_vector
+
+    def predict(self, feat_counter: Counter) -> int:
+        total_sum = 0
+        for i in range(len(self.weight_vector)):
+            feat_elem = feat_counter.get(i)
+            if feat_elem is None:
+                feat_elem = 0
+
+            total_sum += self.weight_vector[i] * feat_elem
+
+        if total_sum > 0:
+            return 1
+        return 0
 
 
 class LogisticRegressionClassifier(SentimentClassifier):
@@ -119,12 +144,34 @@ def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureE
     :return: trained PerceptronClassifier model
     """
 
-    # We have the feature vector. It is going to get bigger as we see more examples.
-    # We need to define a weight vector and write rules for how it will change
-    # Once we have both we can do a dot product of them to predict the label
+    # count features in each sentence and place in a list
+    feat_counters = []
     for i in range(len(train_exs)):
-        feature_vector = feat_extractor.extract_features(train_exs[i].words, True)
-    raise Exception("Must be implemented")
+        feat_counters.append(feat_extractor.extract_features(train_exs[i].words, True))
+
+    # number of total features will be size of index
+    feat_indexer = feat_extractor.get_indexer()
+    num_of_features = feat_indexer.__len__()
+
+    # create entire weight vector with a size of feature count
+    weight_vector = np.zeros(num_of_features, dtype=int)
+
+    alpha = 1
+    perceptron = PerceptronClassifier(weight_vector)
+
+    for i in range(len(train_exs)):
+        label_pred = perceptron.predict(feat_counters[i])
+
+        # subtract when predicted 1 but actual 0
+        if label_pred > train_exs[i].label:
+            for feat in train_exs[i].words:
+                weight_vector[feat_indexer.index_of(feat)] -= alpha
+
+        # add when predicted 0 but actual 1
+        if label_pred < train_exs[i].label:
+            for feat in train_exs[i].words:
+                weight_vector[feat_indexer.index_of(feat)] += alpha
+    return perceptron
 
 
 def train_logistic_regression(train_exs: List[SentimentExample],

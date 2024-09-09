@@ -111,15 +111,16 @@ class PerceptronClassifier(SentimentClassifier):
         self.feat_extractor = feat_extractor
 
     def predict(self, sentence: List[str]) -> int:
-        total_sum = 0
+        sentence_counter = self.feat_extractor.extract_features(sentence)
         indexer = self.feat_extractor.get_indexer()
-        sentence_counter = self.feat_extractor.extract_features(sentence, False)
+        feat_vector = np.zeros(len(self.weights))
 
         for word in sentence_counter:
-            word_index = indexer.index_of(word)
-            total_sum += self.weights[word_index] * sentence_counter[word]
+            feat_vector[indexer.index_of(word)] = 1
 
-        if total_sum > 0:
+        pred = np.dot(self.weights, feat_vector)
+
+        if pred > 0:
             return 1
         return 0
 
@@ -150,13 +151,17 @@ def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureE
 
     # create weight vector based off index size
     indexer = feat_extractor.get_indexer()
-    weights = np.zeros(indexer.__len__(), dtype='int')
+    weights = np.zeros(indexer.__len__())
 
-    alpha = 1
-    epoch = 100
+    alpha = .5
+    epoch = 10
     perceptron = PerceptronClassifier(weights, feat_extractor)
 
-    for epoch_count in range(epoch):
+    for epoch_count in range(1, epoch):
+        random.shuffle(train_exs)
+
+        if epoch_count % 2 == 0:
+            alpha -= .01
         for i in range(len(train_exs)):
             label_pred = perceptron.predict(train_exs[i].words)
 

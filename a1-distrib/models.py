@@ -2,9 +2,13 @@
 
 from sentiment_data import *
 from utils import *
-
 from collections import Counter
+from nltk.corpus import stopwords
+
+import random
 import numpy as np
+
+stop_words = set(stopwords.words('english'))
 
 
 class FeatureExtractor(object):
@@ -28,18 +32,6 @@ class FeatureExtractor(object):
         raise Exception("Don't call me, call my subclasses")
 
 
-stopwords = ["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself",
-             "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself",
-             "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these",
-             "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do",
-             "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while",
-             "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before",
-             "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again",
-             "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each",
-             "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than",
-             "too", "very", "s", "t", "can", "will", "just", "don", "should", "now", ".", ",", "'"]
-
-
 class UnigramFeatureExtractor(FeatureExtractor):
     """
     Extracts unigram bag-of-words features from a sentence. It's up to you to decide how you want to handle counts
@@ -53,11 +45,15 @@ class UnigramFeatureExtractor(FeatureExtractor):
         return self.indexer
 
     def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
+        # remove stopwords from sentence, lower all words
+        # add to indexer if true
         c = Counter()
         for word in sentence:
-            if add_to_indexer and word not in stopwords:
-                c[self.indexer.add_and_get_index(word)] += 1
-
+            word = word.lower()
+            if word not in stop_words:
+                if add_to_indexer:
+                    self.indexer.add_and_get_index(word)
+                c[word] += 1
         return c
 
 
@@ -108,17 +104,18 @@ class PerceptronClassifier(SentimentClassifier):
     modify the constructor to pass these in.
     """
 
-    def __init__(self, weight_vector: np.array):
-        self.weight_vector = weight_vector
+    def __init__(self, weights, feat_extractor):
+        self.weights = weights
+        self.feat_extractor = feat_extractor
 
-    def predict(self, feat_counter: Counter) -> int:
+    def predict(self, sentence: List[str]) -> int:
         total_sum = 0
-        for i in range(len(self.weight_vector)):
-            feat_elem = feat_counter.get(i)
-            if feat_elem is None:
-                feat_elem = 0
+        indexer = self.feat_extractor.get_indexer()
+        sentence_counter = self.feat_extractor.extract_features(sentence, False)
 
-            total_sum += self.weight_vector[i] * feat_elem
+        for word in sentence_counter:
+            word_index = indexer.index_of(word)
+            total_sum += self.weights[word_index] * sentence_counter[word]
 
         if total_sum > 0:
             return 1
@@ -144,33 +141,36 @@ def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureE
     :return: trained PerceptronClassifier model
     """
 
-    # count features in each sentence and place in a list
-    feat_counters = []
-    for i in range(len(train_exs)):
-        feat_counters.append(feat_extractor.extract_features(train_exs[i].words, True))
+    # count all features and update index
+    feat_counter = Counter()
+    for sentence in train_exs:
+        feat_counter.update(feat_extractor.extract_features(sentence.words, True))
 
-    # number of total features will be size of index
-    feat_indexer = feat_extractor.get_indexer()
-    num_of_features = feat_indexer.__len__()
-
-    # create entire weight vector with a size of feature count
-    weight_vector = np.zeros(num_of_features, dtype=int)
+    # create weight vector based off index size
+    indexer = feat_extractor.get_indexer()
+    weights = np.zeros(indexer.__len__(), dtype='int')
 
     alpha = 1
-    perceptron = PerceptronClassifier(weight_vector)
+    epoch = 100
+    perceptron = PerceptronClassifier(weights, feat_extractor)
 
-    for i in range(len(train_exs)):
-        label_pred = perceptron.predict(feat_counters[i])
+    for epoch_count in range(epoch):
+        for i in range(len(train_exs)):
+            label_pred = perceptron.predict(train_exs[i].words)
 
-        # subtract when predicted 1 but actual 0
-        if label_pred > train_exs[i].label:
-            for feat in train_exs[i].words:
-                weight_vector[feat_indexer.index_of(feat)] -= alpha
+            # subtract when predicted 1 but actual 0
+            if label_pred > train_exs[i].label:
+                for word in train_exs[i].words:
+                    weights[indexer.index_of(word)] -= alpha
+                    if weights[indexer.index_of(word)] < -1:
+                        weights[indexer.index_of(word)] = -1
 
-        # add when predicted 0 but actual 1
-        if label_pred < train_exs[i].label:
-            for feat in train_exs[i].words:
-                weight_vector[feat_indexer.index_of(feat)] += alpha
+            # add when predicted 0 but actual 1
+            if label_pred < train_exs[i].label:
+                for word in train_exs[i].words:
+                    weights[indexer.index_of(word)] += alpha
+                    if weights[indexer.index_of(word)] > 1:
+                        weights[indexer.index_of(word)] = 1
     return perceptron
 
 
@@ -199,7 +199,7 @@ def train_model(args, train_exs: List[SentimentExample], dev_exs: List[Sentiment
     if args.model == "TRIVIAL":
         feat_extractor = None
     elif args.feats == "UNIGRAM":
-        # Add additional preprocessing code here
+        random.shuffle(train_exs)
         feat_extractor = UnigramFeatureExtractor(Indexer())
     elif args.feats == "BIGRAM":
         # Add additional preprocessing code here

@@ -9,6 +9,8 @@ import random
 import numpy as np
 
 stop_words = set(stopwords.words('english'))
+additional_words = ['.', ',', "'s", 'film', 'movie']
+stop_words.update(additional_words)
 
 
 class FeatureExtractor(object):

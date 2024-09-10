@@ -9,8 +9,6 @@ import random
 import numpy as np
 
 stop_words = set(stopwords.words('english'))
-additional_words = ['.', ',', "'s", 'film', 'movie', '``', "''", "'", "`"]
-stop_words.update(additional_words)
 
 
 class FeatureExtractor(object):
@@ -105,8 +103,24 @@ class BetterFeatureExtractor(FeatureExtractor):
     Better feature extractor...try whatever you can think of!
     """
 
+    additional_words = ['.', ',', "'s", 'film', 'movie', '``', "''", "'", "`"]
+    stop_words.update(additional_words)
+
     def __init__(self, indexer: Indexer):
-        raise Exception("Must be implemented")
+        self.indexer = indexer
+
+    def get_indexer(self):
+        return self.indexer
+
+    def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
+        c = Counter()
+        for word in sentence:
+            word = word.lower()
+            if word not in stop_words:
+                if add_to_indexer:
+                    self.indexer.add_and_get_index(word)
+                c[word] += 1
+        return c
 
 
 class SentimentClassifier(object):

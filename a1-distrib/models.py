@@ -184,12 +184,12 @@ class LogisticRegressionClassifier(SentimentClassifier):
     def predict(self, sentence: List[str]) -> float:
         sentence_counter = self.feat_extractor.extract_features(sentence)
         indexer = self.feat_extractor.get_indexer()
-        feat_vector = np.zeros(len(self.weights))
+        feat_vector = np.zeros(shape=(len(self.weights[0]),))
 
         for word in sentence_counter:
-            feat_vector[indexer.index_of(word)] = 1
+            feat_vector[indexer.index_of(word)] = sentence_counter[word]
 
-        pred = np.dot(self.weights, feat_vector)
+        pred = self.weights @ feat_vector
 
         if pred > 0:
             return 1
@@ -207,7 +207,6 @@ def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureE
     :param feat_extractor: feature extractor to use
     :return: trained PerceptronClassifier model
     """
-    train_exs = preprocess(train_exs)
     # count all features and update index
     for sentence in train_exs:
         feat_extractor.extract_features(sentence.words, True)
@@ -262,37 +261,42 @@ def train_logistic_regression(train_exs: List[SentimentExample],
 
     # create weight vector based off index size
     indexer = feat_extractor.get_indexer()
-    weights = np.zeros(indexer.__len__())
+    weights = np.zeros(shape=(1, indexer.__len__()))
 
-    alpha = 1
-    epoch = 10
+    alpha = .001
+    epoch = 50
     lr = LogisticRegressionClassifier(weights, feat_extractor)
 
     for epoch_count in range(1, epoch):
         random.shuffle(train_exs)
-        if epoch_count % 2 == 0:
-            alpha -= .01
+
         for i in range(len(train_exs)):
-            label_pred = lr.predict(train_exs[i].words)
+            sentence = train_exs[i].words
+            true_label = train_exs[i].label
+            label_pred = lr.predict(sentence)
 
             # subtract when predicted 1 but actual 0
-            if label_pred > train_exs[i].label:
-                for word in train_exs[i].words:
-                    weights[indexer.index_of(word)] -= alpha * (1 - sigmoid(label_pred))
-                    if weights[indexer.index_of(word)] < -1:
-                        weights[indexer.index_of(word)] = -1
+            if label_pred > true_label:
+                for word in sentence:
+                    if word:
+                        feat_index = indexer.index_of(word)
+                        weights[0][feat_index] -= alpha * (1 - sigmoid(label_pred))
+                        if weights[0][feat_index] < -1:
+                            weights[0][feat_index] = -1
 
             # add when predicted 0 but actual 1
-            if label_pred < train_exs[i].label:
-                for word in train_exs[i].words:
-                    weights[indexer.index_of(word)] += alpha * (1 - sigmoid(label_pred))
-                    if weights[indexer.index_of(word)] > 1:
-                        weights[indexer.index_of(word)] = 1
-
+            if label_pred < true_label:
+                for word in sentence:
+                    if word:
+                        feat_index = indexer.index_of(word)
+                        weights[0][feat_index] += alpha * (1 - sigmoid(label_pred))
+                        if weights[0][feat_index] > 1:
+                            weights[0][feat_index] = 1
     return lr
 
 
 def preprocess(train_exs: List[SentimentExample]):
+    random.shuffle(train_exs)
     cleaned_train_exs = []
     for i in range(len(train_exs)):
         for j in range(len(train_exs[i].words)):
@@ -319,13 +323,13 @@ def train_model(args, train_exs: List[SentimentExample], dev_exs: List[Sentiment
     if args.model == "TRIVIAL":
         feat_extractor = None
     elif args.feats == "UNIGRAM":
-        random.shuffle(train_exs)
+        train_exs = preprocess(train_exs)
         feat_extractor = UnigramFeatureExtractor(Indexer())
     elif args.feats == "BIGRAM":
-        # Add additional preprocessing code here
+        train_exs = preprocess(train_exs)
         feat_extractor = BigramFeatureExtractor(Indexer())
     elif args.feats == "BETTER":
-        # Add additional preprocessing code here
+        train_exs = preprocess(train_exs)
         feat_extractor = BetterFeatureExtractor(Indexer())
     else:
         raise Exception("Pass in UNIGRAM, BIGRAM, or BETTER to run the appropriate system")

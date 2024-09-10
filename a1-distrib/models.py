@@ -145,9 +145,8 @@ def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureE
     """
 
     # count all features and update index
-    feat_counter = Counter()
     for sentence in train_exs:
-        feat_counter.update(feat_extractor.extract_features(sentence.words, True))
+        feat_extractor.extract_features(sentence.words, True)
 
     # create weight vector based off index size
     indexer = feat_extractor.get_indexer()

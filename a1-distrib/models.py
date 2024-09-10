@@ -9,7 +9,7 @@ import random
 import numpy as np
 
 stop_words = set(stopwords.words('english'))
-additional_words = ['.', ',', "'s", 'film', 'movie']
+additional_words = ['.', ',', "'s", 'film', 'movie', '``', "''", "'", "`"]
 stop_words.update(additional_words)
 
 
@@ -65,7 +65,39 @@ class BigramFeatureExtractor(FeatureExtractor):
     """
 
     def __init__(self, indexer: Indexer):
-        raise Exception("Must be implemented")
+        self.indexer = indexer
+
+    def get_indexer(self):
+        return self.indexer
+
+    def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
+        # remove stopwords from sentence, lower all words
+        # add to indexer if true
+
+        stopless_sentence = []
+        for word in sentence:
+            if word.lower() not in stop_words:
+                stopless_sentence.append(word.lower())
+
+        c = Counter()
+        ind = 0
+        for i in range(len(stopless_sentence)):
+
+            if ind + 1 < len(stopless_sentence):
+                word_one = stopless_sentence[ind]
+                word_two = stopless_sentence[ind + 1]
+                if add_to_indexer:
+                    self.indexer.add_and_get_index(word_one + word_two)
+                c[word_one + word_two] += 1
+                ind += 2
+            elif ind + 1 == len(stopless_sentence):
+                word_one = stopless_sentence[ind]
+                if add_to_indexer:
+                    self.indexer.add_and_get_index(word_one)
+                c[word_one] += 1
+            else:
+                break
+        return c
 
 
 class BetterFeatureExtractor(FeatureExtractor):

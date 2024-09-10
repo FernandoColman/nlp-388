@@ -44,10 +44,19 @@ class UnigramFeatureExtractor(FeatureExtractor):
     def get_indexer(self):
         return self.indexer
 
+    def preprocess_sentence(self, sentence: List[str]):
+        cleaned_sentence = []
+        for word in sentence:
+            word = word.lower()
+            if word not in stop_words:
+                cleaned_sentence.append(word)
+        return cleaned_sentence
+
     def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
         # remove stopwords from sentence, lower all words
         # add to indexer if true
         c = Counter()
+        self.preprocess_sentence(sentence)
         for word in sentence:
             if word:
                 if add_to_indexer:
@@ -67,14 +76,18 @@ class BigramFeatureExtractor(FeatureExtractor):
     def get_indexer(self):
         return self.indexer
 
+    def preprocess_sentence(self, sentence: List[str]):
+        cleaned_sentence = []
+        for word in sentence:
+            word = word.lower()
+            if word not in stop_words:
+                cleaned_sentence.append(word)
+        return cleaned_sentence
+
     def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
         # remove stopwords from sentence, lower all words
         # add to indexer if true
-
-        stopless_sentence = []
-        for word in sentence:
-            if word.lower() not in stop_words:
-                stopless_sentence.append(word.lower())
+        stopless_sentence = self.preprocess_sentence(sentence)
 
         c = Counter()
         ind = 0
@@ -111,11 +124,19 @@ class BetterFeatureExtractor(FeatureExtractor):
     def get_indexer(self):
         return self.indexer
 
-    def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
-        c = Counter()
+    def preprocess_sentence(self, sentence: List[str]):
+        cleaned_sentence = []
         for word in sentence:
             word = word.lower()
             if word not in stop_words:
+                cleaned_sentence.append(word)
+        return cleaned_sentence
+
+    def extract_features(self, sentence: List[str], add_to_indexer: bool = False) -> Counter:
+        c = Counter()
+        self.preprocess_sentence(sentence)
+        for word in sentence:
+            if word:
                 if add_to_indexer:
                     self.indexer.add_and_get_index(word)
                 c[word] += 1
@@ -182,6 +203,7 @@ class LogisticRegressionClassifier(SentimentClassifier):
         self.feat_extractor = feat_extractor
 
     def predict(self, sentence: List[str]) -> float:
+        sentence = self.feat_extractor.preprocess_sentence(sentence)
         sentence_counter = self.feat_extractor.extract_features(sentence)
         indexer = self.feat_extractor.get_indexer()
         feat_vector = np.zeros(shape=(len(self.weights[0]),))
@@ -263,7 +285,7 @@ def train_logistic_regression(train_exs: List[SentimentExample],
     indexer = feat_extractor.get_indexer()
     weights = np.zeros(shape=(1, indexer.__len__()))
 
-    alpha = .001
+    alpha = .01
     epoch = 50
     lr = LogisticRegressionClassifier(weights, feat_extractor)
 
@@ -274,13 +296,14 @@ def train_logistic_regression(train_exs: List[SentimentExample],
             sentence = train_exs[i].words
             true_label = train_exs[i].label
             label_pred = lr.predict(sentence)
+            gradient = sigmoid(label_pred - sigmoid(label_pred))
 
             # subtract when predicted 1 but actual 0
             if label_pred > true_label:
                 for word in sentence:
                     if word:
                         feat_index = indexer.index_of(word)
-                        weights[0][feat_index] -= alpha * (1 - sigmoid(label_pred))
+                        weights[0][feat_index] -= alpha * gradient
                         if weights[0][feat_index] < -1:
                             weights[0][feat_index] = -1
 
@@ -289,7 +312,7 @@ def train_logistic_regression(train_exs: List[SentimentExample],
                 for word in sentence:
                     if word:
                         feat_index = indexer.index_of(word)
-                        weights[0][feat_index] += alpha * (1 - sigmoid(label_pred))
+                        weights[0][feat_index] += alpha * gradient
                         if weights[0][feat_index] > 1:
                             weights[0][feat_index] = 1
     return lr

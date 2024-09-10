@@ -132,8 +132,27 @@ class LogisticRegressionClassifier(SentimentClassifier):
     modify the constructor to pass these in.
     """
 
-    def __init__(self):
-        raise Exception("Must be implemented")
+    def __init__(self, weights, feat_extractor):
+        self.weights = weights
+        self.feat_extractor = feat_extractor
+
+    def predict(self, sentence: List[str]) -> float:
+        sentence_counter = self.feat_extractor.extract_features(sentence)
+        indexer = self.feat_extractor.get_indexer()
+        feat_vector = np.zeros(len(self.weights))
+
+        for word in sentence_counter:
+            feat_vector[indexer.index_of(word)] = 1
+
+        pred = np.dot(self.weights, feat_vector)
+
+        if pred > 0:
+            return 1
+        return 0
+
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
 
 
 def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureExtractor) -> PerceptronClassifier:
@@ -188,7 +207,40 @@ def train_logistic_regression(train_exs: List[SentimentExample],
     :param feat_extractor: feature extractor to use
     :return: trained LogisticRegressionClassifier model
     """
-    raise Exception("Must be implemented")
+    # count all features and update index
+    for sentence in train_exs:
+        feat_extractor.extract_features(sentence.words, True)
+
+    # create weight vector based off index size
+    indexer = feat_extractor.get_indexer()
+    weights = np.zeros(indexer.__len__())
+
+    alpha = 1
+    epoch = 10
+    lr = LogisticRegressionClassifier(weights, feat_extractor)
+
+    for epoch_count in range(1, epoch):
+        random.shuffle(train_exs)
+        if epoch_count % 2 == 0:
+            alpha -= .01
+        for i in range(len(train_exs)):
+            label_pred = lr.predict(train_exs[i].words)
+
+            # subtract when predicted 1 but actual 0
+            if label_pred > train_exs[i].label:
+                for word in train_exs[i].words:
+                    weights[indexer.index_of(word)] -= alpha * (1 - sigmoid(label_pred))
+                    if weights[indexer.index_of(word)] < -1:
+                        weights[indexer.index_of(word)] = -1
+
+            # add when predicted 0 but actual 1
+            if label_pred < train_exs[i].label:
+                for word in train_exs[i].words:
+                    weights[indexer.index_of(word)] += alpha * (1 - sigmoid(label_pred))
+                    if weights[indexer.index_of(word)] > 1:
+                        weights[indexer.index_of(word)] = 1
+
+    return lr
 
 
 def train_model(args, train_exs: List[SentimentExample], dev_exs: List[SentimentExample]) -> SentimentClassifier:

@@ -49,8 +49,7 @@ class UnigramFeatureExtractor(FeatureExtractor):
         # add to indexer if true
         c = Counter()
         for word in sentence:
-            word = word.lower()
-            if word not in stop_words:
+            if word:
                 if add_to_indexer:
                     self.indexer.add_and_get_index(word)
                 c[word] += 1
@@ -159,12 +158,12 @@ class PerceptronClassifier(SentimentClassifier):
     def predict(self, sentence: List[str]) -> int:
         sentence_counter = self.feat_extractor.extract_features(sentence)
         indexer = self.feat_extractor.get_indexer()
-        feat_vector = np.zeros(len(self.weights))
+        feat_vector = np.zeros(shape=(len(self.weights[0]),))
 
         for word in sentence_counter:
-            feat_vector[indexer.index_of(word)] = 1
+            feat_vector[indexer.index_of(word)] = sentence_counter[word]
 
-        pred = np.dot(self.weights, feat_vector)
+        pred = self.weights @ feat_vector
 
         if pred > 0:
             return 1
@@ -208,40 +207,44 @@ def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureE
     :param feat_extractor: feature extractor to use
     :return: trained PerceptronClassifier model
     """
-
+    train_exs = preprocess(train_exs)
     # count all features and update index
     for sentence in train_exs:
         feat_extractor.extract_features(sentence.words, True)
 
     # create weight vector based off index size
     indexer = feat_extractor.get_indexer()
-    weights = np.zeros(indexer.__len__())
+    weights = np.zeros(shape=(1, indexer.__len__()))
 
-    alpha = .5
-    epoch = 10
+    alpha = .01
+    epoch = 25
     perceptron = PerceptronClassifier(weights, feat_extractor)
 
     for epoch_count in range(1, epoch):
         random.shuffle(train_exs)
 
-        if epoch_count % 2 == 0:
-            alpha -= .01
         for i in range(len(train_exs)):
-            label_pred = perceptron.predict(train_exs[i].words)
+            sentence = train_exs[i].words
+            true_label = train_exs[i].label
+            label_pred = perceptron.predict(sentence)
 
             # subtract when predicted 1 but actual 0
-            if label_pred > train_exs[i].label:
-                for word in train_exs[i].words:
-                    weights[indexer.index_of(word)] -= alpha
-                    if weights[indexer.index_of(word)] < -1:
-                        weights[indexer.index_of(word)] = -1
+            if label_pred > true_label:
+                for word in sentence:
+                    if word:
+                        feat_index = indexer.index_of(word)
+                        weights[0][feat_index] -= alpha
+                        if weights[0][feat_index] < -1:
+                            weights[0][feat_index] = -1
 
             # add when predicted 0 but actual 1
-            if label_pred < train_exs[i].label:
-                for word in train_exs[i].words:
-                    weights[indexer.index_of(word)] += alpha
-                    if weights[indexer.index_of(word)] > 1:
-                        weights[indexer.index_of(word)] = 1
+            if label_pred < true_label:
+                for word in sentence:
+                    if word:
+                        feat_index = indexer.index_of(word)
+                        weights[0][feat_index] += alpha
+                        if weights[0][feat_index] > 1:
+                            weights[0][feat_index] = 1
     return perceptron
 
 
@@ -287,6 +290,19 @@ def train_logistic_regression(train_exs: List[SentimentExample],
                         weights[indexer.index_of(word)] = 1
 
     return lr
+
+
+def preprocess(train_exs: List[SentimentExample]):
+    cleaned_train_exs = []
+    for i in range(len(train_exs)):
+        for j in range(len(train_exs[i].words)):
+            train_exs[i].words[j] = train_exs[i].words[j].lower()
+            if train_exs[i].words[j] in stop_words:
+                train_exs[i].words[j] = ""
+        stopless_sentence = [x for x in train_exs[i].words if x]
+        if stopless_sentence:
+            cleaned_train_exs.append(SentimentExample(stopless_sentence, train_exs[i].label))
+    return cleaned_train_exs
 
 
 def train_model(args, train_exs: List[SentimentExample], dev_exs: List[SentimentExample]) -> SentimentClassifier:

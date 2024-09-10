@@ -215,7 +215,7 @@ def train_logistic_regression(train_exs: List[SentimentExample],
     indexer = feat_extractor.get_indexer()
     weights = np.zeros(indexer.__len__())
 
-    alpha = .5
+    alpha = 1
     epoch = 10
     lr = LogisticRegressionClassifier(weights, feat_extractor)
 

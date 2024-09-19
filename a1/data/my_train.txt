@@ -1,0 +1,12 @@
+1   movie good test bad
+1   movie test
+1   good good this was
+1   test test good
+0   movie bad
+0   bad bad
+0   bad bad bad movie
+1   movie
+0   bad
+1   test bad bad good
+1   good good bad
+

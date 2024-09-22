@@ -178,7 +178,7 @@ def train_deep_averaging_network(args, train_exs: List[SentimentExample], dev_ex
             y_onehot = torch.tensor([0., 1.]) if sentence.label == 1 else torch.tensor([1., 0.])
 
             nsc.model.zero_grad()
-            probs = nsc.model.forward(index_layer)
+            probs = nsc.model(index_layer)
 
             loss = loss_crit(probs, y_onehot)
             total_loss += loss

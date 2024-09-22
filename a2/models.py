@@ -66,22 +66,9 @@ class NeuralSentimentClassifier(SentimentClassifier):
     def predict(self, sentence: List[str], has_typos: bool) -> int:
         self.model.eval()
         with torch.no_grad():
-            index_layer = self.get_index_layer(sentence)
-
-            probs = self.model.forward(index_layer)
+            probs = self.model(sentence)
             return torch.argmax(probs).item()
 
-    def get_index_layer(self, sentence) -> list:
-        # grab words if sentence is a SentimentExample
-        if isinstance(sentence, SentimentExample):
-            sentence = sentence.words
-
-        index_layer = []
-        for word in sentence:
-            word_index = self.word_embeddings.word_indexer.index_of(word)
-            if word_index > -1:
-                index_layer.append(word_index)
-        return index_layer
 
 
 class DAN(nn.Module):
@@ -99,10 +86,10 @@ class DAN(nn.Module):
 
     def __init__(self, word_embeddings: WordEmbeddings, hidden_dim, num_classes):
         super(DAN, self).__init__()
+        self.embeddings = word_embeddings
+        self.embed_layer = word_embeddings.get_initialized_embedding_layer()
 
-        self.embeddings = word_embeddings.get_initialized_embedding_layer()
-
-        self.W1 = nn.Linear(self.embeddings.embedding_dim, hidden_dim)
+        self.W1 = nn.Linear(self.embed_layer.embedding_dim, hidden_dim)
         self.W2 = nn.Linear(hidden_dim, num_classes)
         self.g = nn.ReLU()
         self.log_softmax = nn.LogSoftmax(dim=0)
@@ -110,7 +97,7 @@ class DAN(nn.Module):
         nn.init.xavier_uniform_(self.W1.weight)
         nn.init.xavier_uniform_(self.W2.weight)
 
-    def forward(self, word_indices):
+    def forward(self, x):
         """
         Runs the neural network on the given data and returns log probabilities of the various classes.
 
@@ -121,7 +108,8 @@ class DAN(nn.Module):
         """
 
         # finds the embeddings for each word. one word will have 50 or 300 embeddings
-        embeds_for_words = self.embeddings(torch.tensor(word_indices))
+        word_indices = self.get_index_layer(x)
+        embeds_for_words = self.embed_layer(torch.tensor(word_indices))
 
         # averages the embeddings of each word, now each embedding is averaged from all the words
         avg_embeds = torch.mean(embeds_for_words, dim=0)
@@ -131,6 +119,18 @@ class DAN(nn.Module):
         output_layer = self.W2(non_linearity)
         probs = self.log_softmax(output_layer)  # range: [-inf, 0], closer to 0 means higher prob
         return probs
+
+    def get_index_layer(self, sentence) -> list:
+        # grab words if sentence is a SentimentExample
+        if isinstance(sentence, SentimentExample):
+            sentence = sentence.words
+
+        index_layer = []
+        for word in sentence:
+            word_index = self.embeddings.word_indexer.index_of(word)
+            if word_index > -1:
+                index_layer.append(word_index)
+        return index_layer
 
 
 def train_deep_averaging_network(args, train_exs: List[SentimentExample], dev_exs: List[SentimentExample],
@@ -174,11 +174,10 @@ def train_deep_averaging_network(args, train_exs: List[SentimentExample], dev_ex
         random.shuffle(train_exs)
 
         for sentence in train_exs:
-            index_layer = nsc.get_index_layer(sentence.words)
             y_onehot = torch.tensor([0., 1.]) if sentence.label == 1 else torch.tensor([1., 0.])
 
             nsc.model.zero_grad()
-            probs = nsc.model(index_layer)
+            probs = nsc.model(sentence)
 
             loss = loss_crit(probs, y_onehot)
             total_loss += loss

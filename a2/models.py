@@ -1,5 +1,5 @@
 # models.py
-
+import nltk
 import torch
 import torch.nn as nn
 from numpy import mean
@@ -62,13 +62,38 @@ class NeuralSentimentClassifier(SentimentClassifier):
         self.has_typos = has_typos
         self.word_embeddings = word_embeddings
         self.model = DAN(word_embeddings, hidden_dim, num_classes)
+        self.indexer = word_embeddings.word_indexer
+        self.prefix_dict = self.get_prefix_dict()
 
     def predict(self, sentence: List[str], has_typos: bool) -> int:
         self.model.eval()
         with torch.no_grad():
+            if has_typos:
+                sentence = self.fix_typos(sentence)
             probs = self.model(sentence)
             return torch.argmax(probs).item()
 
+    def fix_typos(self, sentence: list[str]):
+
+        for i in range(len(sentence)):
+            if self.indexer.index_of(sentence[i]) == -1 and len(sentence[i]) >= 3:
+                prefix_elem = self.prefix_dict.get(sentence[i][:3])
+                # if the word is a typo, has a length < 3, and has a prefix_elem
+                if prefix_elem:
+                    for dict_word in prefix_elem:
+                        if nltk.edit_distance(dict_word, sentence[i]) <= 1:
+                            # print("actual word: %s prefix chosen: %s", sentence[i], dict_word)
+                            sentence[i] = dict_word
+                            break
+        return sentence
+
+    def get_prefix_dict(self):
+        prefix_dict = {}
+
+        for word in self.indexer.objs_to_ints:
+            if len(word) >= 3:
+                prefix_dict.setdefault(word[:3], []).append(word)
+        return prefix_dict
 
 
 class DAN(nn.Module):
@@ -185,6 +210,6 @@ def train_deep_averaging_network(args, train_exs: List[SentimentExample], dev_ex
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        print("Total loss on epoch %i: %f" % (epoch, total_loss))
+        print("Total loss on epoch %i: %f" % (epoch + 1, total_loss))
 
     return nsc

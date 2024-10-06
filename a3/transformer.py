@@ -188,7 +188,7 @@ class PositionalEncoding(nn.Module):
 def train_classifier(args, train: list[LetterCountingExample], dev):
 
     # hyperparameters
-    num_epochs = 10
+    num_epochs = 5
 
     # model hyperparameters
     d_model = 20  # dimension of embeddings

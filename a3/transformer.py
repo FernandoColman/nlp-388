@@ -51,6 +51,7 @@ class Transformer(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, d_model)
         self.linear = nn.Linear(d_model, num_classes)
+        self.dropout = nn.Dropout(0.1)
         nn.init.xavier_uniform_(self.linear.weight)
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
@@ -70,6 +71,7 @@ class Transformer(nn.Module):
             indices = layer(indices)
             list_attentions.append(layer.attention)
 
+        indices = self.dropout(indices)
         log_probs = self.log_softmax(self.linear(indices))
         att_maps = torch.stack(list_attentions)
 
@@ -128,21 +130,14 @@ class TransformerLayer(nn.Module):
         K = self.WK(input_vecs)
         V = self.WV(input_vecs)
 
-        # print("X Matrix (20 x d_model): ", input_vecs.shape)
-        # print("\nQ Matrix (20, d_internal)", Q.shape)
-        # print("\nK Matrix (20, d_internal)", K.shape)
-        # print("\nV Matrix (20, d_internal", V.shape)
-
         self_attention_output = self.self_attention(Q, K, V)
 
-        # print("\nSelf-Attention Output: ", self_attention_output.shape)
-
         prep_first_residual = self.W0(self_attention_output)
-
         first_residual = prep_first_residual + input_vecs
-        ffn_output = self.ff(first_residual)
-        second_residual = ffn_output + first_residual
 
+        ffn_output = self.ff(first_residual)
+
+        second_residual = ffn_output + first_residual
         return second_residual
 
     def self_attention(self, queries, keys, values):
@@ -191,7 +186,6 @@ class PositionalEncoding(nn.Module):
 def train_classifier(args, train: list[LetterCountingExample], dev):
 
     # hyperparameters
-    learning_rate = 0.0001
     num_epochs = 10
 
     # model hyperparameters
@@ -212,7 +206,7 @@ def train_classifier(args, train: list[LetterCountingExample], dev):
     optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-2)
 
     # only for debugging
-    train = train[:1000]
+    # train = train[:1000]
 
     for epoch in range(0, num_epochs):
         loss_this_epoch = 0.0

@@ -50,6 +50,7 @@ class Transformer(nn.Module):
         self.num_layers = num_layers
 
         self.embedding = nn.Embedding(vocab_size, d_model)
+        self.pos_embedding = PositionalEncoding(d_model, num_positions)
         self.linear = nn.Linear(d_model, num_classes)
         self.dropout = nn.Dropout(0.1)
         nn.init.xavier_uniform_(self.linear.weight)
@@ -66,6 +67,7 @@ class Transformer(nn.Module):
         """
         list_attentions = []
         indices = self.embedding(indices)  # [seq len x d_model]
+        indices = self.pos_embedding(indices)
 
         for layer in self.layers:
             indices = layer(indices)
@@ -206,7 +208,7 @@ def train_classifier(args, train: list[LetterCountingExample], dev):
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # only for debugging
-    # train = train[:1000]
+    train = train[:1000]
 
     for epoch in range(0, num_epochs):
         loss_this_epoch = 0.0

@@ -186,12 +186,12 @@ class PositionalEncoding(nn.Module):
 def train_classifier(args, train: list[LetterCountingExample], dev):
 
     # hyperparameters
-    num_epochs = 10
+    num_epochs = 20
 
     # model hyperparameters
-    d_model = 64  # dimension of embeddings
-    d_internal = 64  # dimension of Q and K for simpler computation
-    d_ff = 64  # dimension of feedforward layer
+    d_model = 20  # dimension of embeddings
+    d_internal = 128  # dimension of Q and K for simpler computation
+    d_ff = 2048  # dimension of feedforward layer
     num_layers = 1
 
     # model parameters
@@ -203,7 +203,7 @@ def train_classifier(args, train: list[LetterCountingExample], dev):
     model = Transformer(vocab_size, num_positions, d_model, d_internal, d_ff, num_classes, num_layers)
     model.zero_grad()
     model.train()
-    optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-2)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # only for debugging
     # train = train[:1000]

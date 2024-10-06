@@ -51,7 +51,10 @@ class Transformer(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, d_model)
         self.linear = nn.Linear(d_model, num_classes)
-        self.log_softmax = nn.LogSoftmax(dim=0)
+        nn.init.xavier_uniform_(self.linear.weight)
+        self.log_softmax = nn.LogSoftmax(dim=-1)
+
+        self.layers = nn.ModuleList([TransformerLayer(d_model, d_internal, d_ff) for _ in range(num_layers)])
 
     def forward(self, indices):
         """
@@ -63,8 +66,7 @@ class Transformer(nn.Module):
         list_attentions = []
         indices = self.embedding(indices)  # [seq len x d_model]
 
-        for i in range(self.num_layers):
-            layer = TransformerLayer(self.d_model, self.d_internal, self.d_ff)
+        for layer in self.layers:
             indices = layer(indices)
             list_attentions.append(layer.attention)
 
@@ -99,6 +101,12 @@ class TransformerLayer(nn.Module):
         self.WK = nn.Linear(d_model, d_internal)
         self.WV = nn.Linear(d_model, d_internal)
         self.W0 = nn.Linear(d_internal, d_model)
+
+        nn.init.xavier_uniform_(self.WQ.weight)
+        nn.init.xavier_uniform_(self.WK.weight)
+        nn.init.xavier_uniform_(self.WV.weight)
+        nn.init.xavier_uniform_(self.W0.weight)
+
         self.attention = torch.zeros((20, 20))
 
         self.ff = nn.Sequential(
@@ -106,6 +114,9 @@ class TransformerLayer(nn.Module):
             nn.ReLU(),
             nn.Linear(d_ff, d_model)
         )
+
+        nn.init.xavier_uniform_(self.ff[0].weight)
+        nn.init.xavier_uniform_(self.ff[2].weight)
 
     def forward(self, input_vecs: torch.Tensor):
         """
@@ -123,7 +134,9 @@ class TransformerLayer(nn.Module):
         # print("\nV Matrix (20, d_internal", V.shape)
 
         self_attention_output = self.self_attention(Q, K, V)
+
         # print("\nSelf-Attention Output: ", self_attention_output.shape)
+
         prep_first_residual = self.W0(self_attention_output)
 
         first_residual = prep_first_residual + input_vecs
@@ -133,13 +146,12 @@ class TransformerLayer(nn.Module):
         return second_residual
 
     def self_attention(self, queries, keys, values):
-        scores = torch.matmul(queries, keys.transpose(0, 1))
-        self.attention = scores  # save attention map for visualization. 20x20 matrix
+        scores = torch.matmul(queries, keys.transpose(-2, -1))  # 20x20 matrix
 
-        stabilize_grads = scores.div(self.d_internal ** 0.5)
-        softmaxed = torch.nn.functional.softmax(stabilize_grads, dim=0)
-        times_values = torch.matmul(softmaxed, values)
-        return times_values
+        stabilize_grads = scores / (self.d_internal ** 0.5)
+        softmaxed = torch.nn.functional.softmax(stabilize_grads, dim=-1)
+        self.attention = softmaxed
+        return torch.matmul(softmaxed, values)
 
 
 # Implementation of positional encoding that you can use in your network
@@ -197,7 +209,7 @@ def train_classifier(args, train: list[LetterCountingExample], dev):
     model = Transformer(vocab_size, num_positions, d_model, d_internal, d_ff, num_classes, num_layers)
     model.zero_grad()
     model.train()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-2)
 
     # only for debugging
     train = train[:1000]

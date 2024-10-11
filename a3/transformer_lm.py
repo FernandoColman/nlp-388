@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch import optim
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
-from a3.utils import Indexer
+from utils import Indexer
 
 
 class PositionalEncoding(nn.Module):

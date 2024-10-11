@@ -225,17 +225,17 @@ def train_lm(args, train_text: str, dev_text, vocab_index: Indexer) -> NeuralLan
     :return: a NeuralLanguageModel instance trained on the given data
     """
     # for debugging
-    train_text = train_text[:100]
+    # train_text = train_text[:100]
 
     # padding
     train_text += " " * (20 - len(train_text) % 20)
 
     # training hyperparameters
-    num_epochs = 20
+    num_epochs = 15
 
     # model hyperparameters
     learning_rate = 0.0001
-    d_model = 512           # dimension of embeddings
+    d_model = 256           # dimension of embeddings
     num_heads = 2               # number of heads in the multi-head attention
     d_ff = 64             # dimension of feedforward layer
     num_layers = 2

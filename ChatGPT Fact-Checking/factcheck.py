@@ -1,10 +1,15 @@
 # factcheck.py
+from distutils.command.clean import clean
+from string import punctuation
 
 import torch
 from typing import List
 import numpy as np
 import spacy
 import gc
+
+from spacy.lang.en.stop_words import STOP_WORDS
+from spacy.lang.punctuation import PUNCT
 
 
 class FactExample:
@@ -80,8 +85,35 @@ class AlwaysEntailedFactChecker(object):
 
 class WordRecallThresholdFactChecker(object):
     def predict(self, fact: str, passages: List[dict]) -> str:
-        raise Exception("Implement me")
+        clean_fact = self.remove_stopwpuncts(fact)
+        for passage in passages:
 
+            # classify with text
+            passage_text = self.remove_stopwpuncts(passage["text"])
+            common = set(clean_fact.split()).intersection(set(passage_text.split()))
+            if len(common) >= 0.65 * len(clean_fact.split()):
+                return "S"
+
+            # classify with title
+            passage_title = self.remove_stopwpuncts(passage["title"])
+            common = set(clean_fact.split()).intersection(set(passage_title.split()))
+            if len(common) >= 0.65 * len(clean_fact.split()):
+                return "S"
+
+        return "NS"
+
+    def remove_stopwpuncts(self, text: str) -> str:
+        stopwords = set(STOP_WORDS)
+        punct_set = set(PUNCT)
+        punct_set.update({'.', ',', '!', '?', ';', ':'})
+
+        filtered_tokens = []
+        for token in text.lower().split():
+            token = token.strip(''.join(punct_set))  # Strip punctuation from both ends
+            if token and token not in stopwords:
+                filtered_tokens.append(token)
+
+        return ' '.join(filtered_tokens)
 
 class EntailmentFactChecker(object):
     def __init__(self, ent_model):

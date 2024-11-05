@@ -100,9 +100,7 @@ class WordRecallThresholdFactChecker(object):
             common = clean_fact.intersection(clean_text)
             if len(common) / len(clean_fact) > 0.5:
                 return "S"
-
-        else:
-            return "NS"
+        return "NS"
 
 class EntailmentFactChecker(object):
     def __init__(self, ent_model):

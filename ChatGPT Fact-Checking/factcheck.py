@@ -7,6 +7,7 @@ import numpy as np
 import spacy
 import gc
 
+from nltk import sent_tokenize
 from spacy.lang.en.stop_words import STOP_WORDS
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
@@ -49,7 +50,8 @@ class EntailmentModel:
         # Note that the labels are ["entailment", "neutral", "contradiction"]. There are a number of ways to map
         # these logits or probabilities to classification decisions; you'll have to decide how you want to do this.
 
-        entailed_prob = logits[0, 0].item()
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        probs = probs.cpu().numpy()[0]
 
         # To prevent out-of-memory (OOM) issues during autograding, we explicitly delete
         # objects inputs, outputs, logits, and any results that are no longer needed after the computation.
@@ -57,9 +59,7 @@ class EntailmentModel:
         gc.collect()
 
         # return something
-        if entailed_prob > 0.5:
-            return True
-
+        return probs.argmax() == 0
 
 class FactChecker(object):
     """
@@ -107,13 +107,17 @@ class EntailmentFactChecker(object):
         self.ent_model = ent_model
 
     def predict(self, fact: str, passages: List[dict]) -> str:
-        for passage in passages:
-            clean_fact = set(remove_stopwpuncts(fact))
-            clean_text = set(remove_stopwpuncts(passage["text"]))
-            entailment = self.ent_model.check_entailment(clean_fact, clean_text)
-            if entailment:
-                return "S"
+        clean_fact = set(remove_stopwpuncts(fact))
 
+        for passage in passages:
+            for sentence in sent_tokenize(passage["text"]):
+                clean_sent = set(remove_stopwpuncts(sentence))
+
+                # basically do word overlap check before entailment
+                common = clean_fact.intersection(clean_sent)
+                if len(common) / len(clean_fact) > 0.1:
+                    if self.ent_model.check_entailment(sentence, fact):
+                        return "S"
         return "NS"
 
 

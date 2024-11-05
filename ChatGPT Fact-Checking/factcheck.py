@@ -1,6 +1,5 @@
 # factcheck.py
 from distutils.command.clean import clean
-from string import punctuation
 
 import torch
 from typing import List
@@ -9,7 +8,10 @@ import spacy
 import gc
 
 from spacy.lang.en.stop_words import STOP_WORDS
-from spacy.lang.punctuation import PUNCT
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+
+ps = PorterStemmer()
 
 
 class FactExample:
@@ -47,7 +49,7 @@ class EntailmentModel:
         # Note that the labels are ["entailment", "neutral", "contradiction"]. There are a number of ways to map
         # these logits or probabilities to classification decisions; you'll have to decide how you want to do this.
 
-        raise Exception("Not implemented")
+        entailed_prob = logits[0, 0].item()
 
         # To prevent out-of-memory (OOM) issues during autograding, we explicitly delete
         # objects inputs, outputs, logits, and any results that are no longer needed after the computation.
@@ -55,6 +57,8 @@ class EntailmentModel:
         gc.collect()
 
         # return something
+        if entailed_prob > 0.5:
+            return True
 
 
 class FactChecker(object):
@@ -82,45 +86,37 @@ class AlwaysEntailedFactChecker(object):
     def predict(self, fact: str, passages: List[dict]) -> str:
         return "S"
 
+def remove_stopwpuncts(text: str):
+    tokens = word_tokenize(text)
+    only_words = [ps.stem(word) for word in tokens if word.isalnum() and word not in STOP_WORDS]
+    return set(only_words)
 
 class WordRecallThresholdFactChecker(object):
     def predict(self, fact: str, passages: List[dict]) -> str:
-        clean_fact = self.remove_stopwpuncts(fact)
+        clean_fact = set(remove_stopwpuncts(fact))
+
         for passage in passages:
-
-            # classify with text
-            passage_text = self.remove_stopwpuncts(passage["text"])
-            common = set(clean_fact.split()).intersection(set(passage_text.split()))
-            if len(common) >= 0.65 * len(clean_fact.split()):
+            clean_text = set(remove_stopwpuncts(passage["text"]))
+            common = clean_fact.intersection(clean_text)
+            if len(common) / len(clean_fact) > 0.5:
                 return "S"
 
-            # classify with title
-            passage_title = self.remove_stopwpuncts(passage["title"])
-            common = set(clean_fact.split()).intersection(set(passage_title.split()))
-            if len(common) >= 0.65 * len(clean_fact.split()):
-                return "S"
-
-        return "NS"
-
-    def remove_stopwpuncts(self, text: str) -> str:
-        stopwords = set(STOP_WORDS)
-        punct_set = set(PUNCT)
-        punct_set.update({'.', ',', '!', '?', ';', ':'})
-
-        filtered_tokens = []
-        for token in text.lower().split():
-            token = token.strip(''.join(punct_set))  # Strip punctuation from both ends
-            if token and token not in stopwords:
-                filtered_tokens.append(token)
-
-        return ' '.join(filtered_tokens)
+        else:
+            return "NS"
 
 class EntailmentFactChecker(object):
     def __init__(self, ent_model):
         self.ent_model = ent_model
 
     def predict(self, fact: str, passages: List[dict]) -> str:
-        raise Exception("Implement me")
+        for passage in passages:
+            clean_fact = set(remove_stopwpuncts(fact))
+            clean_text = set(remove_stopwpuncts(passage["text"]))
+            entailment = self.ent_model.check_entailment(clean_fact, clean_text)
+            if entailment:
+                return "S"
+
+        return "NS"
 
 
 # OPTIONAL
